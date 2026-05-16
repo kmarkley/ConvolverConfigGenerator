@@ -16,6 +16,7 @@
     --accent: #4a9eff;
     --accent2: #00e5a0;
     --accent3: #ff6b35;
+    --error: #ff3b3b;
     --text: #c8d4f0;
     --text-dim: #6b7a99;
     --text-bright: #eef2ff;
@@ -283,6 +284,9 @@
     background: var(--enabled-bg);
     box-shadow: inset 3px 0 0 var(--accent2);
   }
+  .cell-inner.enabled.warn {
+    box-shadow: inset 3px 0 0 var(--error);
+  }
 
   .cell-enable-row {
     display: flex;
@@ -333,6 +337,7 @@
     transition: border-color 0.15s;
   }
   .file-display:hover { border-color: var(--accent); }
+  .file-display:focus { border-color: var(--accent); outline: none; }
   .file-display.empty { color: var(--text-dim); font-style: italic; }
 
   .file-edit-wrap {
@@ -416,7 +421,20 @@
   }
   .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
 
-  .btn-group { display: flex; gap: 8px; }
+  .btn-group { display: flex; gap: 8px; align-items: center; }
+
+  .filename-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-bright);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: 3px;
+    outline: none;
+    width: 140px;
+  }
+  .filename-input:focus { border-color: var(--accent); }
 
   textarea.output-text {
     background: var(--bg);
@@ -521,7 +539,8 @@
       <div class="section-title">Generated Config</div>
       <div class="btn-group">
         <button class="btn btn-secondary" id="copyBtn">Copy</button>
-        <button class="btn btn-primary" id="downloadBtn">Download .cfg</button>
+        <input type="text" class="filename-input" id="downloadName" value="convolver.cfg" spellcheck="false">
+        <button class="btn btn-primary" id="downloadBtn">Download</button>
       </div>
     </div>
     <textarea class="output-text" id="outputText" readonly spellcheck="false"></textarea>
@@ -762,7 +781,12 @@ function renderMatrix() {
 function buildCell(inCh, outCh) {
   const cell = state.cells[inCh][outCh];
   const div = document.createElement('div');
-  div.className = `cell-inner ${cell.enabled ? 'enabled' : 'disabled'}`;
+  const updateCellClass = () => {
+    const state_ = cell.enabled ? 'enabled' : 'disabled';
+    const warn = cell.enabled && !cell.filterFile ? ' warn' : '';
+    div.className = `cell-inner ${state_}${warn}`;
+  };
+  updateCellClass();
 
   // Enable checkbox
   const enableRow = document.createElement('div');
@@ -782,7 +806,7 @@ function buildCell(inCh, outCh) {
 
   cb.addEventListener('change', () => {
     cell.enabled = cb.checked;
-    div.className = `cell-inner ${cell.enabled ? 'enabled' : 'disabled'}`;
+    updateCellClass();
     updateLabel(cell.enabled);
     contentFields.style.display = cell.enabled ? '' : 'none';
     regenerateOutput();
@@ -804,6 +828,7 @@ function buildCell(inCh, outCh) {
   fileDisplay.className = `file-display ${cell.filterFile ? '' : 'empty'}`;
   fileDisplay.textContent = cell.filterFile || 'click to set…';
   fileDisplay.title = cell.filterFile || '';
+  fileDisplay.tabIndex = 0;
   fileField.appendChild(fileDisplay);
 
   const fileEditWrap = document.createElement('div');
@@ -816,11 +841,15 @@ function buildCell(inCh, outCh) {
   fileField.appendChild(fileEditWrap);
   contentFields.appendChild(fileField);
 
-  fileDisplay.addEventListener('click', () => {
+  const openFileEdit = () => {
     fileDisplay.style.display = 'none';
     fileEditWrap.classList.add('open');
     fileInput.focus();
     fileInput.select();
+  };
+  fileDisplay.addEventListener('click', openFileEdit);
+  fileDisplay.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFileEdit(); }
   });
   fileInput.addEventListener('blur', () => {
     cell.filterFile = fileInput.value.trim();
@@ -829,6 +858,7 @@ function buildCell(inCh, outCh) {
     fileDisplay.className = `file-display ${cell.filterFile ? '' : 'empty'}`;
     fileDisplay.style.display = '';
     fileEditWrap.classList.remove('open');
+    updateCellClass();
     regenerateOutput();
   });
   fileInput.addEventListener('keydown', e => {
@@ -1014,13 +1044,34 @@ function regenerateOutput() {
 // ─────────────────────────────────────────────
 // Download / Copy
 // ─────────────────────────────────────────────
-document.getElementById('downloadBtn').addEventListener('click', () => {
+document.getElementById('downloadBtn').addEventListener('click', async () => {
   const text = document.getElementById('outputText').value;
+  const nameEl = document.getElementById('downloadName');
+  let name = nameEl.value.trim() || 'convolver.cfg';
+  if (!/\.[^.]+$/.test(name)) name += '.cfg';
+  nameEl.value = name;
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: 'Convolver config', accept: { 'text/plain': ['.cfg'] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(text);
+      await writable.close();
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      // fall through to anchor fallback
+    }
+  }
+
   const blob = new Blob([text], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'convolver.cfg';
+  a.download = name;
   a.click();
   URL.revokeObjectURL(url);
 });
@@ -1122,7 +1173,7 @@ function parseCfg(text) {
   };
 }
 
-function applyImport(text) {
+function applyImport(text, filename) {
   try {
     const parsed = parseCfg(text);
     Object.assign(state, parsed, { attenMode: 'db' });
@@ -1130,6 +1181,7 @@ function applyImport(text) {
     document.getElementById('numInputs').value  = state.numInputs;
     document.getElementById('numOutputs').value = state.numOutputs;
     document.getElementById('attenMode').value  = 'db';
+    if (filename) document.getElementById('downloadName').value = filename;
     renderLabelInputs();
     renderDelayInputs();
     renderMatrix();
@@ -1146,7 +1198,7 @@ document.getElementById('importFileInput').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => applyImport(ev.target.result);
+  reader.onload = ev => applyImport(ev.target.result, file.name);
   reader.readAsText(file);
   e.target.value = ''; // reset so the same file can be re-imported
 });
