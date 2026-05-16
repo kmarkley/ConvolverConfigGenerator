@@ -1,0 +1,11 @@
+# VS Code
+.vscode/
+!.vscode/extensions.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Development scratch files
+*.bak
+*.tmp
