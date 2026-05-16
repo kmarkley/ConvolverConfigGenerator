@@ -1270,7 +1270,7 @@ function regenerateOutput() {
   for (let i = 0; i < state.numInputs; i++) {
     for (let o = 0; o < state.numOutputs; o++) {
       const cell = state.cells[i][o];
-      if (!cell.enabled) continue;
+      if (!cell.enabled || !cell.filterFile) continue;
       const k = `${cell.filterFile}\0${cell.filterChannel}`;
       if (!byFilter.has(k)) byFilter.set(k, []);
       byFilter.get(k).push({ inCh: i, outCh: o });
@@ -1300,7 +1300,7 @@ function regenerateOutput() {
       const outAnn = outs.map((o, idx) => { const v = state.cells[ins[0]][o].outputDb; return `${outLabels[idx]}=${v === 0 ? '0' : v}${unit}`; });
 
       lines.push(`# Path ${pathCount}: [${inLabels.join(',')}] → [${outLabels.join(',')}]  |  IR ch${filterChannel}  |  in: ${inAnn.join(' ')}  |  out: ${outAnn.join(' ')}`);
-      lines.push(filterFile || '# WARNING: no filter file specified');
+      lines.push(filterFile);
       lines.push(`${filterChannel}`);
       lines.push(ins .map(i => formatToken(i, state.cells[i][outs[0]].inputDb )).join(' '));
       lines.push(outs.map(o => formatToken(o, state.cells[ins[0]][o].outputDb)).join(' '));
