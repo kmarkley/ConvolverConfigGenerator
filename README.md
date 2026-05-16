@@ -31,6 +31,24 @@ The main grid represents every input → output routing path. Each cell contains
 
 A **green** left stripe marks enabled cells with a filter file set. A **red** stripe marks enabled cells missing a filter file.
 
+#### Path Labels
+
+Each enabled cell with a filter file displays a small **P#** badge in its top-right corner showing which filter path number that cell will appear as in the generated config. Cells that will be combined into a single multi-token filter path share a badge color; cells that must be separate paths each get a distinct color. Solo paths (no sharing possible) show a grey badge.
+
+### Filter Path Grouping
+
+The Convolver format allows multiple input and output channels to be listed on a single filter path, mixing inputs before convolution and distributing the result to multiple outputs. This is more efficient than running separate convolutions for each routing.
+
+The tool automatically groups compatible cells into combined paths on export. Cells can share a filter path only when:
+
+- They reference the **same filter file and channel**
+- Their enabled (inCh, outCh) pairs form a **complete rectangle** — every combination of the grouped inputs and outputs must be active
+- Each input channel has a **consistent input attenuation** across all outputs in the group, and each output channel has a **consistent output attenuation** across all inputs
+
+When cells can't be fully combined (e.g. a diagonal routing where ch0→ch6 and ch1→ch7 use the same IR but ch0→ch7 and ch1→ch6 are not enabled), the tool automatically splits them into separate paths. The P# badges make this visible before you export.
+
+On import, multi-token paths are expanded back into individual matrix cells correctly.
+
 ### Config Output
 The generated `.cfg` text updates live. From the output toolbar:
 
@@ -43,17 +61,17 @@ The generated `.cfg` text updates live. From the output toolbar:
 
 ```
 <sample_rate> <num_inputs> <num_outputs> <output_mask_hex>
-<input_delay_ms> ...      # one value per input channel
-<output_delay_ms> ...     # one value per output channel
+<input_delay_ms> ...           # one value per input channel
+<output_delay_ms> ...          # one value per output channel
 
 # repeated for each active filter path:
 <filter_filename>
-<filter_channel>          # 0-based index within the IR file
-<in_ch>.<in_scale>        # input channel . scale factor (0 = unity gain)
-<out_ch>.<out_scale>      # output channel . scale factor (0 = unity gain)
+<filter_channel>               # 0-based index within the IR file
+<in_ch>.<in_scale> [...]       # one or more space-separated input tokens
+<out_ch>.<out_scale> [...]     # one or more space-separated output tokens
 ```
 
-Scale notation uses a dot as a **separator**, not a decimal point — `1.5` means channel 1, scale 0.5.
+Scale notation uses a dot as a **separator**, not a decimal point — `1.5` means channel 1, scale 0.5. Multiple tokens on the input or output line cause Convolver to mix those channels before (or distribute after) convolution, which is more efficient than separate filter paths for the same IR.
 
 ## Browser Compatibility
 
