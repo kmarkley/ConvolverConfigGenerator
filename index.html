@@ -1094,6 +1094,69 @@ function buildCell(inCh, outCh) {
 // ─────────────────────────────────────────────
 // Config generation
 // ─────────────────────────────────────────────
+function partitionIntoGroups(cells, pairs, numInputs, numOutputs) {
+  const key = (i, o) => i * numOutputs + o;
+  const remaining = new Set(pairs.map(p => key(p.inCh, p.outCh)));
+  const groups = [];
+
+  while (remaining.size > 0) {
+    const seedKey   = [...remaining][0];
+    const seedIn    = Math.floor(seedKey / numOutputs);
+    const seedOut   = seedKey % numOutputs;
+    const seedOutDb = cells[seedIn][seedOut].outputDb;
+
+    // Candidate inputs: all inCh in remaining routing to seedOut with same outputDb
+    let validInputs = new Set();
+    for (let i = 0; i < numInputs; i++) {
+      if (remaining.has(key(i, seedOut)) && cells[i][seedOut].outputDb === seedOutDb)
+        validInputs.add(i);
+    }
+
+    // Common outputs: outCh values reachable by ALL validInputs
+    let validOutputs = null;
+    for (const i of validInputs) {
+      const reachable = new Set();
+      for (let o = 0; o < numOutputs; o++) {
+        if (remaining.has(key(i, o))) reachable.add(o);
+      }
+      validOutputs = validOutputs === null ? reachable
+        : new Set([...validOutputs].filter(o => reachable.has(o)));
+    }
+    validOutputs = validOutputs ?? new Set();
+
+    // Iterate until stable: drop outputs with inconsistent outputDb, then inputs with inconsistent inputDb
+    let changed = true;
+    while (changed) {
+      changed = false;
+      if (validInputs.size === 0 || validOutputs.size === 0) break;
+      const newOut = new Set([...validOutputs].filter(o => {
+        const ref = cells[[...validInputs][0]][o].outputDb;
+        return [...validInputs].every(i => remaining.has(key(i, o)) && cells[i][o].outputDb === ref);
+      }));
+      if (newOut.size !== validOutputs.size) { validOutputs = newOut; changed = true; }
+
+      if (validInputs.size === 0 || validOutputs.size === 0) break;
+      const newIn = new Set([...validInputs].filter(i => {
+        const ref = cells[i][[...validOutputs][0]].inputDb;
+        return [...validOutputs].every(o => remaining.has(key(i, o)) && cells[i][o].inputDb === ref);
+      }));
+      if (newIn.size !== validInputs.size) { validInputs = newIn; changed = true; }
+    }
+
+    if (validInputs.size === 0 || validOutputs.size === 0) {
+      validInputs  = new Set([seedIn]);
+      validOutputs = new Set([seedOut]);
+    }
+
+    groups.push({ inputs: validInputs, outputs: validOutputs });
+    for (const i of validInputs)
+      for (const o of validOutputs)
+        remaining.delete(key(i, o));
+  }
+
+  return groups;
+}
+
 function regenerateOutput() {
   const lines = [];
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -1108,8 +1171,8 @@ function regenerateOutput() {
   lines.push(`# Then for each active filter path (4 lines each):`);
   lines.push(`#   <filter_filename>`);
   lines.push(`#   <filter_channel>          (0-based channel index within the IR file)`);
-  lines.push(`#   <in_ch>.<in_scale>        (input channel . scale factor; 0 = unity gain)`);
-  lines.push(`#   <out_ch>.<out_scale>      (output channel . scale factor; 0 = unity gain)`);
+  lines.push(`#   <in_ch>.<scale> [<in_ch2>.<scale2> ...]   (one or more space-separated input tokens)`);
+  lines.push(`#   <out_ch>.<scale> [<out_ch2>.<scale2> ...]  (one or more space-separated output tokens)`);
   lines.push(`#`);
   lines.push(`# Scale notation: channel.scale where the dot is a separator, NOT a decimal point.`);
   lines.push(`#   e.g.  0.0   = channel 0, unity gain`);
@@ -1148,34 +1211,44 @@ function regenerateOutput() {
   lines.push(outDelayStrs.join(' '));
   lines.push('');
 
-  // Filter paths
+  // Filter paths — group enabled cells by (filterFile, filterChannel)
   let pathCount = 0;
   lines.push(`# --- Filter Paths ---`);
 
+  const byFilter = new Map();
   for (let i = 0; i < state.numInputs; i++) {
     for (let o = 0; o < state.numOutputs; o++) {
       const cell = state.cells[i][o];
       if (!cell.enabled) continue;
+      const k = `${cell.filterFile}\0${cell.filterChannel}`;
+      if (!byFilter.has(k)) byFilter.set(k, []);
+      byFilter.get(k).push({ inCh: i, outCh: o });
+    }
+  }
+
+  const isDb = state.attenMode === 'db';
+  const unit = isDb ? 'dB' : '';
+
+  for (const pairs of byFilter.values()) {
+    const { filterFile, filterChannel } = state.cells[pairs[0].inCh][pairs[0].outCh];
+    const groups = partitionIntoGroups(state.cells, pairs, state.numInputs, state.numOutputs);
+
+    for (const { inputs, outputs } of groups) {
       pathCount++;
+      const ins  = [...inputs ].sort((a, b) => a - b);
+      const outs = [...outputs].sort((a, b) => a - b);
 
-      const inLbl = state.inputLabels[i] || `In${i}`;
-      const outLbl = state.outputLabels[o] || `Out${o}`;
-      const inToken = formatToken(i, cell.inputDb);
-      const outToken = formatToken(o, cell.outputDb);
-      const isDb = state.attenMode === 'db';
-      const fmtAtten = (val, token) => {
-        const scalePart = `.${token.split('.').slice(1).join('.')}`;
-        if (val === 0) return isDb ? '0 dB (unity)' : '0 (unity)';
-        return isDb ? `${val} dB → ${scalePart}` : `scale ${val} → ${scalePart}`;
-      };
-      const inDbStr = fmtAtten(cell.inputDb, inToken);
-      const outDbStr = fmtAtten(cell.outputDb, outToken);
+      const inLabels  = ins .map(i => state.inputLabels[i]  || `In${i}`);
+      const outLabels = outs.map(o => state.outputLabels[o] || `Out${o}`);
 
-      lines.push(`# Path ${pathCount}: ${inLbl} → ${outLbl}  |  IR ch${cell.filterChannel}  |  in: ${inDbStr}  |  out: ${outDbStr}`);
-      lines.push(cell.filterFile || '# WARNING: no filter file specified');
-      lines.push(`${cell.filterChannel}`);
-      lines.push(`${inToken}`);
-      lines.push(`${outToken}`);
+      const inAnn  = ins .map((i, idx) => { const v = state.cells[i][outs[0]].inputDb;  return `${inLabels[idx]}=${v === 0 ? '0' : v}${unit}`; });
+      const outAnn = outs.map((o, idx) => { const v = state.cells[ins[0]][o].outputDb; return `${outLabels[idx]}=${v === 0 ? '0' : v}${unit}`; });
+
+      lines.push(`# Path ${pathCount}: [${inLabels.join(',')}] → [${outLabels.join(',')}]  |  IR ch${filterChannel}  |  in: ${inAnn.join(' ')}  |  out: ${outAnn.join(' ')}`);
+      lines.push(filterFile || '# WARNING: no filter file specified');
+      lines.push(`${filterChannel}`);
+      lines.push(ins .map(i => formatToken(i, state.cells[i][outs[0]].inputDb )).join(' '));
+      lines.push(outs.map(o => formatToken(o, state.cells[ins[0]][o].outputDb)).join(' '));
       lines.push('');
     }
   }
@@ -1300,17 +1373,23 @@ function parseCfg(text) {
   const scaleToDb = s => s === 0 ? 0 : parseFloat((20 * Math.log10(s)).toFixed(2));
 
   for (let i = 0; i + 3 < pathData.length; i += 4) {
-    const inParsed  = parseToken(pathData[i + 2]);
-    const outParsed = parseToken(pathData[i + 3]);
-    const inCh = inParsed.channel, outCh = outParsed.channel;
-    if (inCh < 0 || inCh >= numInputs || outCh < 0 || outCh >= numOutputs) continue;
+    const filterFile    = pathData[i];
+    const filterChannel = parseInt(pathData[i + 1]) || 0;
+    const inTokens  = pathData[i + 2].trim().split(/\s+/).map(parseToken);
+    const outTokens = pathData[i + 3].trim().split(/\s+/).map(parseToken);
 
-    const cell = cells[inCh][outCh];
-    cell.enabled       = true;
-    cell.filterFile    = pathData[i];
-    cell.filterChannel = parseInt(pathData[i + 1]) || 0;
-    cell.inputDb       = scaleToDb(inParsed.scale);
-    cell.outputDb      = scaleToDb(outParsed.scale);
+    for (const inParsed of inTokens) {
+      for (const outParsed of outTokens) {
+        const inCh = inParsed.channel, outCh = outParsed.channel;
+        if (inCh < 0 || inCh >= numInputs || outCh < 0 || outCh >= numOutputs) continue;
+        const cell = cells[inCh][outCh];
+        cell.enabled       = true;
+        cell.filterFile    = filterFile;
+        cell.filterChannel = filterChannel;
+        cell.inputDb       = scaleToDb(inParsed.scale);
+        cell.outputDb      = scaleToDb(outParsed.scale);
+      }
+    }
   }
 
   const defaultLabels = (prefix, n) => Array.from({ length: n }, (_, i) => `${prefix}${i + 1}`);
