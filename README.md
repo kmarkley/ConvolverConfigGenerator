@@ -24,20 +24,26 @@ The main grid represents every input → output routing path. Each cell contains
 | Field | Notes |
 |---|---|
 | Enable checkbox | Hidden fields collapse when disabled |
-| Filter File | Click (or focus + Enter/Space) to edit; red left stripe when enabled but empty |
+| Filter File | Click (or focus + Enter/Space) to edit |
 | Filter Channel | Integer ≥ 0 — the channel index within the IR file |
 | Input Atten | ≤ 0 dB or 0–0.9999 scale depending on Atten Mode |
 | Output Atten | Same constraints as Input Atten |
 
-A **green** left stripe marks enabled cells with a filter file set. A **red** stripe marks enabled cells missing a filter file.
+A **green** left stripe marks enabled cells with all filters configured. A **red** stripe marks enabled cells with one or more filters missing a file. 
 
-#### Path Labels
+Numbered badges in the top-right corner show export path assignments — see [Path Badges](#path-badges) below.
 
-Each enabled cell with a filter file displays a small **P#** badge in its top-right corner showing which filter path number that cell will appear as in the generated config. Cells that will be combined into a single multi-token filter path share a badge color; cells that must be separate paths each get a distinct color. Solo paths (no sharing possible) show a grey badge.
+### Path Badges
 
-### Filter Path Grouping
+Every enabled cell with at least one filter file set displays one or more numbered badges in its top-right corner. 
 
-The Convolver format allows multiple input and output channels to be listed on a single filter path, mixing inputs before convolution and distributing the result to multiple outputs. This is more efficient than running separate convolutions for each routing.
+Each badge shows the cfg export path number that filter will occupy. 
+
+#### Filter Path Grouping
+
+The Convolver format allows multiple input and output channels to be listed on a single filter path, mixing inputs before convolution and distributing the result to multiple outputs. This is more efficient than running separate convolutions for the same IR file.
+
+Path badges are color-coded by path grouping: cells whose filters are combined into the same multi-token path share a color; filters that must be emitted as separate paths each get a distinct color; solo paths (no grouping possible) show a grey badge.
 
 The tool automatically groups compatible cells into combined paths on export. Cells can share a filter path only when:
 
@@ -45,9 +51,17 @@ The tool automatically groups compatible cells into combined paths on export. Ce
 - Their enabled (inCh, outCh) pairs form a **complete rectangle** — every combination of the grouped inputs and outputs must be active
 - Each input channel has a **consistent input attenuation** across all outputs in the group, and each output channel has a **consistent output attenuation** across all inputs
 
-When cells can't be fully combined (e.g. a diagonal routing where ch0→ch6 and ch1→ch7 use the same IR but ch0→ch7 and ch1→ch6 are not enabled), the tool automatically splits them into separate paths. The P# badges make this visible before you export.
+When cells can't be fully combined (e.g. a diagonal routing where ch0→ch6 and ch1→ch7 use the same IR but ch0→ch7 and ch1→ch6 are not enabled), the tool automatically splits them into separate paths. The path badges make this visible before you export.
 
 On import, multi-token paths are expanded back into individual matrix cells correctly.
+
+#### Stacked Filters
+
+Each cell can hold **multiple filter definitions** for the same input → output path. This is useful when a signal needs to pass through independent convolutions that Convolver sums together — for example, an independent high-pass filter paired with a shared low-pass filter.
+
+The `+` and `×` controls to the left of the path badges add or remove filters on the cell. When a cell has more than one filter, clicking a badge switches which filter's fields are shown in the cell — the active filter is indicated by a white highlight ring.
+
+Each stacked filter has its own file, channel, and attenuation values, and becomes a separate 4-line block in the exported cfg file (all referencing the same input and output channels). On import, multiple blocks targeting the same channel pair are automatically restored as stacked filters in the same cell.
 
 ### Config Output
 The generated `.cfg` text updates live. From the output toolbar:
