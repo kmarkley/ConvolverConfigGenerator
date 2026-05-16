@@ -1210,10 +1210,16 @@ function partitionIntoGroups(cells, pairs, numInputs, numOutputs) {
 
 function regenerateOutput() {
   const lines = [];
-  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const _d = new Date();
+  const _off = -_d.getTimezoneOffset();
+  const _sign = _off >= 0 ? '+' : '-';
+  const _hh = String(Math.floor(Math.abs(_off) / 60)).padStart(2, '0');
+  const _mm = String(Math.abs(_off) % 60).padStart(2, '0');
+  const _pad = n => String(n).padStart(2, '0');
+  const now = `${_d.getFullYear()}-${_pad(_d.getMonth()+1)}-${_pad(_d.getDate())} ${_pad(_d.getHours())}:${_pad(_d.getMinutes())}:${_pad(_d.getSeconds())} ${_sign}${_hh}:${_mm}`;
 
   lines.push(`# Convolver Configuration File`);
-  lines.push(`# Generated: ${now}`);
+  lines.push(`# Generated: ${now}  (https://kmarkley.github.io/ConvolverConfigGenerator/)`);
   lines.push(`# Format: Convolver v3.0+  (https://convolver.sourceforge.net/config.html)`);
   lines.push(`#`);
   lines.push(`# Line 1: <sample_rate> <num_inputs> <num_outputs> <output_channel_mask_hex>`);
