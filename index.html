@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Convolver Config Generator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0f1117;
+    --surface: #181c27;
+    --surface2: #1e2333;
+    --border: #2a3048;
+    --border-bright: #3d4f7c;
+    --accent: #4a9eff;
+    --accent2: #00e5a0;
+    --accent3: #ff6b35;
+    --text: #c8d4f0;
+    --text-dim: #6b7a99;
+    --text-bright: #eef2ff;
+    --enabled-bg: #0d1f2d;
+    --disabled-bg: #13151e;
+    --cell-w: 180px;
+    --header-h: 36px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  .app-header {
+    background: var(--surface);
+    border-bottom: 2px solid var(--accent);
+    padding: 14px 24px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+  .app-header h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  .app-header span {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  /* ── Layout ── */
+  .main {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    height: calc(100vh - 53px);
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    grid-row: 1 / 3;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .section-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .field-row label {
+    font-size: 12px;
+    color: var(--text-dim);
+    flex: 1;
+  }
+  .field-row input[type=number], .field-row input[type=text] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-bright);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 4px 8px;
+    width: 100px;
+    border-radius: 3px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field-row input:focus {
+    border-color: var(--accent);
+  }
+
+  .delay-grid {
+    display: grid;
+    gap: 4px;
+  }
+  .delay-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .delay-row .ch-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--accent2);
+    width: 40px;
+    flex-shrink: 0;
+  }
+  .delay-row input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-bright);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 3px 6px;
+    width: 70px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .delay-row input:focus { border-color: var(--accent); }
+  .delay-row .unit { font-size: 10px; color: var(--text-dim); }
+
+  /* channel label inputs in sidebar */
+  .ch-labels-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+  .ch-label-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .ch-label-row .idx {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    width: 18px;
+  }
+  .ch-label-row input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-bright);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 3px 5px;
+    width: 100%;
+    border-radius: 3px;
+    outline: none;
+  }
+  .ch-label-row input:focus { border-color: var(--accent2); }
+
+  .col-labels-title, .row-labels-title {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    font-style: italic;
+  }
+
+  /* ── Matrix area ── */
+  .matrix-area {
+    overflow: auto;
+    padding: 16px;
+    background: var(--bg);
+  }
+
+  .matrix-wrap {
+    display: inline-block;
+    min-width: 100%;
+  }
+
+  table.matrix {
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  table.matrix th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent2);
+    padding: 6px 8px;
+    text-align: center;
+    white-space: nowrap;
+    border-bottom: 2px solid var(--border-bright);
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    min-width: var(--cell-w);
+  }
+  table.matrix th.corner {
+    color: var(--text-dim);
+    font-size: 10px;
+    min-width: 70px;
+    width: 70px;
+    background: var(--surface);
+    position: sticky;
+    left: 0;
+    z-index: 20;
+    border-right: 2px solid var(--border-bright);
+  }
+  table.matrix th.out-header {
+    min-width: var(--cell-w);
+  }
+
+  table.matrix td.row-header {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    padding: 4px 8px;
+    text-align: right;
+    white-space: nowrap;
+    border-right: 2px solid var(--border-bright);
+    background: var(--surface);
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    vertical-align: middle;
+    min-width: 70px;
+    width: 70px;
+  }
+
+  /* ── Cell ── */
+  td.cell {
+    border: 1px solid var(--border);
+    vertical-align: top;
+    padding: 0;
+    min-width: var(--cell-w);
+    width: var(--cell-w);
+  }
+
+  .cell-inner {
+    padding: 6px 7px;
+    min-height: 100px;
+  }
+  .cell-inner.disabled {
+    background: var(--disabled-bg);
+    opacity: 0.4;
+  }
+  .cell-inner.enabled {
+    background: var(--enabled-bg);
+  }
+
+  .cell-enable-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 5px;
+  }
+  .cell-enable-row input[type=checkbox] {
+    accent-color: var(--accent);
+    width: 13px;
+    height: 13px;
+    cursor: pointer;
+  }
+  .cell-enable-row span {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .cell-field {
+    margin-bottom: 4px;
+  }
+  .cell-field label {
+    display: block;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  /* Filter file: truncated display + click to edit */
+  .file-display {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 3px 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    min-height: 22px;
+    transition: border-color 0.15s;
+  }
+  .file-display:hover { border-color: var(--accent); }
+  .file-display.empty { color: var(--text-dim); font-style: italic; }
+
+  .file-edit-wrap {
+    display: none;
+    position: relative;
+  }
+  .file-edit-wrap.open { display: block; }
+  .file-edit-wrap input {
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    color: var(--text-bright);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 3px 6px;
+    width: 100%;
+    border-radius: 3px;
+    outline: none;
+  }
+
+  .cell-field input[type=number] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-bright);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 3px 6px;
+    width: 100%;
+    border-radius: 3px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .cell-field input[type=number]:focus { border-color: var(--accent); }
+
+  .cell-field .db-hint {
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-top: 1px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .cell-field .db-hint span { color: var(--accent2); }
+
+  /* ── Output panel ── */
+  .output-panel {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 200px;
+    max-height: 320px;
+  }
+
+  .output-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .output-toolbar .section-title { margin-bottom: 0; border-bottom: none; padding-bottom: 0; }
+
+  .btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 5px 14px;
+    border-radius: 3px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+  }
+  .btn-primary:hover { background: #6db8ff; }
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--text);
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-group { display: flex; gap: 8px; }
+
+  textarea.output-text {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--accent2);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    padding: 10px 12px;
+    resize: none;
+    border-radius: 3px;
+    flex: 1;
+    outline: none;
+    min-height: 120px;
+  }
+  textarea.output-text:focus { border-color: var(--border-bright); }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+  .copy-flash {
+    animation: flash 0.4s ease;
+  }
+  @keyframes flash {
+    0% { background: var(--accent2); color: #000; }
+    100% { background: transparent; color: var(--text); }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <h1>⬡ CONVOLVER CONFIG GENERATOR</h1>
+  <span>v3.0+ format · .cfg output</span>
+</div>
+
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div>
+      <div class="section-title">Global Parameters</div>
+      <div class="field-row">
+        <label>Sample Rate (Hz)</label>
+        <input type="number" id="sampleRate" value="44100" min="1" step="1">
+      </div>
+      <div class="field-row">
+        <label>Input Channels</label>
+        <input type="number" id="numInputs" value="2" min="1" max="16" step="1">
+      </div>
+      <div class="field-row">
+        <label>Output Channels</label>
+        <input type="number" id="numOutputs" value="2" min="1" max="16" step="1">
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Input Channel Labels</div>
+      <div class="ch-labels-grid" id="inputLabelsGrid"></div>
+    </div>
+
+    <div>
+      <div class="section-title">Output Channel Labels</div>
+      <div class="ch-labels-grid" id="outputLabelsGrid"></div>
+    </div>
+
+    <div>
+      <div class="section-title">Input Delays (ms)</div>
+      <div class="delay-grid" id="inputDelaysGrid"></div>
+    </div>
+
+    <div>
+      <div class="section-title">Output Delays (ms)</div>
+      <div class="delay-grid" id="outputDelaysGrid"></div>
+    </div>
+
+  </div>
+
+  <!-- Matrix -->
+  <div class="matrix-area" id="matrixArea">
+    <div class="matrix-wrap">
+      <table class="matrix" id="matrixTable"></table>
+    </div>
+  </div>
+
+  <!-- Output -->
+  <div class="output-panel">
+    <div class="output-toolbar">
+      <div class="section-title">Generated Config</div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" id="copyBtn">Copy</button>
+        <button class="btn btn-primary" id="downloadBtn">Download .cfg</button>
+      </div>
+    </div>
+    <textarea class="output-text" id="outputText" readonly spellcheck="false"></textarea>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+let state = {
+  sampleRate: 44100,
+  numInputs: 2,
+  numOutputs: 2,
+  inputLabels: ['L', 'R'],
+  outputLabels: ['L', 'R'],
+  inputDelays: [0, 0],
+  outputDelays: [0, 0],
+  // cells[inCh][outCh]
+  cells: []
+};
+
+function makeCell() {
+  return {
+    enabled: false,
+    filterFile: '',
+    filterChannel: 0,
+    inputDb: 0,
+    outputDb: 0
+  };
+}
+
+function ensureCells() {
+  const ni = state.numInputs, no = state.numOutputs;
+  // Grow/shrink rows
+  while (state.cells.length < ni) state.cells.push([]);
+  state.cells.length = ni;
+  // Grow/shrink cols
+  for (let i = 0; i < ni; i++) {
+    while (state.cells[i].length < no) state.cells[i].push(makeCell());
+    state.cells[i].length = no;
+  }
+}
+
+function ensureLabels(arr, n, prefix) {
+  while (arr.length < n) arr.push(prefix + (arr.length + 1));
+  arr.length = n;
+}
+
+function ensureDelays(arr, n) {
+  while (arr.length < n) arr.push(0);
+  arr.length = n;
+}
+
+// ─────────────────────────────────────────────
+// dB helpers
+// ─────────────────────────────────────────────
+function dbToLinear(db) {
+  if (db === 0) return 0; // Convolver "no scaling" shorthand
+  return Math.pow(10, db / 20);
+}
+
+function formatScale(linear) {
+  // Returns scale portion only (no channel prefix)
+  if (linear === 0) return '0';
+  // Clamp to < 1 since the integer part is the channel number
+  // Cap at 4 decimal places, never round up to 1.0
+  let s = linear.toFixed(4);
+  if (parseFloat(s) >= 1.0) s = '0.9999';
+  // Remove leading zero: 0.501 -> .501? No — the spec uses e.g. "0.5"
+  // Actually keep as-is; the format is channel.scale where both are separate fields
+  // joined by the literal dot character. We return just the scale part.
+  return s.replace(/^0\./, '').replace(/0+$/, '') || '0';
+}
+
+function formatToken(channel, db) {
+  const linear = dbToLinear(db);
+  if (linear === 0) return `${channel}.0`;
+  const scaleStr = formatScale(linear);
+  return `${channel}.${scaleStr}`;
+}
+
+// ─────────────────────────────────────────────
+// Sidebar: global fields
+// ─────────────────────────────────────────────
+document.getElementById('sampleRate').addEventListener('input', e => {
+  state.sampleRate = parseInt(e.target.value) || 44100;
+  regenerateOutput();
+});
+document.getElementById('numInputs').addEventListener('change', e => {
+  const n = Math.max(1, Math.min(16, parseInt(e.target.value) || 1));
+  e.target.value = n;
+  state.numInputs = n;
+  ensureLabels(state.inputLabels, n, 'In');
+  ensureDelays(state.inputDelays, n);
+  ensureCells();
+  renderLabelInputs();
+  renderDelayInputs();
+  renderMatrix();
+  regenerateOutput();
+});
+document.getElementById('numOutputs').addEventListener('change', e => {
+  const n = Math.max(1, Math.min(16, parseInt(e.target.value) || 1));
+  e.target.value = n;
+  state.numOutputs = n;
+  ensureLabels(state.outputLabels, n, 'Out');
+  ensureDelays(state.outputDelays, n);
+  ensureCells();
+  renderLabelInputs();
+  renderDelayInputs();
+  renderMatrix();
+  regenerateOutput();
+});
+
+function renderLabelInputs() {
+  renderLabelGrid('inputLabelsGrid', state.inputLabels, 'inputLabels', 'In');
+  renderLabelGrid('outputLabelsGrid', state.outputLabels, 'outputLabels', 'Out');
+}
+
+function renderLabelGrid(gridId, arr, stateKey, prefix) {
+  const grid = document.getElementById(gridId);
+  grid.innerHTML = '';
+  arr.forEach((lbl, i) => {
+    const row = document.createElement('div');
+    row.className = 'ch-label-row';
+    row.innerHTML = `<span class="idx">${i}:</span>
+      <input type="text" value="${lbl}" data-idx="${i}" data-key="${stateKey}">`;
+    grid.appendChild(row);
+  });
+  grid.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const idx = parseInt(e.target.dataset.idx);
+      const key = e.target.dataset.key;
+      state[key][idx] = e.target.value;
+      renderMatrix(); // re-render headers
+      regenerateOutput();
+    });
+  });
+}
+
+function renderDelayInputs() {
+  renderDelayGrid('inputDelaysGrid', state.inputDelays, state.inputLabels, 'inputDelays');
+  renderDelayGrid('outputDelaysGrid', state.outputDelays, state.outputLabels, 'outputDelays');
+}
+
+function renderDelayGrid(gridId, arr, labels, stateKey) {
+  const grid = document.getElementById(gridId);
+  grid.innerHTML = '';
+  arr.forEach((val, i) => {
+    const row = document.createElement('div');
+    row.className = 'delay-row';
+    row.innerHTML = `<span class="ch-label">${labels[i] || i}</span>
+      <input type="number" value="${val}" min="0" step="0.1" data-idx="${i}" data-key="${stateKey}">
+      <span class="unit">ms</span>`;
+    grid.appendChild(row);
+  });
+  grid.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const idx = parseInt(e.target.dataset.idx);
+      const key = e.target.dataset.key;
+      state[key][idx] = parseFloat(e.target.value) || 0;
+      regenerateOutput();
+    });
+  });
+}
+
+// ─────────────────────────────────────────────
+// Matrix
+// ─────────────────────────────────────────────
+function renderMatrix() {
+  const table = document.getElementById('matrixTable');
+  table.innerHTML = '';
+  const ni = state.numInputs, no = state.numOutputs;
+
+  // Header row
+  const thead = document.createElement('thead');
+  const hrow = document.createElement('tr');
+
+  const corner = document.createElement('th');
+  corner.className = 'corner';
+  corner.textContent = 'IN \\ OUT';
+  hrow.appendChild(corner);
+
+  for (let o = 0; o < no; o++) {
+    const th = document.createElement('th');
+    th.className = 'out-header';
+    th.textContent = `Ch${o} · ${state.outputLabels[o] || o}`;
+    hrow.appendChild(th);
+  }
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+
+  // Body
+  const tbody = document.createElement('tbody');
+  for (let i = 0; i < ni; i++) {
+    const tr = document.createElement('tr');
+    const rh = document.createElement('td');
+    rh.className = 'row-header';
+    rh.textContent = `Ch${i} · ${state.inputLabels[i] || i}`;
+    tr.appendChild(rh);
+
+    for (let o = 0; o < no; o++) {
+      const td = document.createElement('td');
+      td.className = 'cell';
+      td.appendChild(buildCell(i, o));
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+}
+
+function buildCell(inCh, outCh) {
+  const cell = state.cells[inCh][outCh];
+  const div = document.createElement('div');
+  div.className = `cell-inner ${cell.enabled ? 'enabled' : 'disabled'}`;
+
+  // Enable checkbox
+  const enableRow = document.createElement('div');
+  enableRow.className = 'cell-enable-row';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = cell.enabled;
+  const cbLabel = document.createElement('span');
+  cbLabel.textContent = cell.enabled ? 'ENABLED' : 'disabled';
+  enableRow.appendChild(cb);
+  enableRow.appendChild(cbLabel);
+  div.appendChild(enableRow);
+
+  cb.addEventListener('change', () => {
+    cell.enabled = cb.checked;
+    div.className = `cell-inner ${cell.enabled ? 'enabled' : 'disabled'}`;
+    cbLabel.textContent = cell.enabled ? 'ENABLED' : 'disabled';
+    regenerateOutput();
+  });
+
+  // Filter file
+  const fileField = document.createElement('div');
+  fileField.className = 'cell-field';
+  const fileLabel = document.createElement('label');
+  fileLabel.textContent = 'Filter File';
+  fileField.appendChild(fileLabel);
+
+  const fileDisplay = document.createElement('div');
+  fileDisplay.className = `file-display ${cell.filterFile ? '' : 'empty'}`;
+  fileDisplay.textContent = cell.filterFile || 'click to set…';
+  fileDisplay.title = cell.filterFile || '';
+  fileField.appendChild(fileDisplay);
+
+  const fileEditWrap = document.createElement('div');
+  fileEditWrap.className = 'file-edit-wrap';
+  const fileInput = document.createElement('input');
+  fileInput.type = 'text';
+  fileInput.value = cell.filterFile;
+  fileInput.placeholder = 'relative/path/to/ir.wav';
+  fileEditWrap.appendChild(fileInput);
+  fileField.appendChild(fileEditWrap);
+  div.appendChild(fileField);
+
+  fileDisplay.addEventListener('click', () => {
+    fileDisplay.style.display = 'none';
+    fileEditWrap.classList.add('open');
+    fileInput.focus();
+    fileInput.select();
+  });
+  fileInput.addEventListener('blur', () => {
+    cell.filterFile = fileInput.value.trim();
+    fileDisplay.textContent = cell.filterFile || 'click to set…';
+    fileDisplay.title = cell.filterFile || '';
+    fileDisplay.className = `file-display ${cell.filterFile ? '' : 'empty'}`;
+    fileDisplay.style.display = '';
+    fileEditWrap.classList.remove('open');
+    regenerateOutput();
+  });
+  fileInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') fileInput.blur();
+    if (e.key === 'Escape') {
+      fileInput.value = cell.filterFile;
+      fileInput.blur();
+    }
+  });
+
+  // Filter channel
+  const fcField = document.createElement('div');
+  fcField.className = 'cell-field';
+  const fcLabel = document.createElement('label');
+  fcLabel.textContent = 'Filter Channel';
+  fcField.appendChild(fcLabel);
+  const fcInput = document.createElement('input');
+  fcInput.type = 'number';
+  fcInput.value = cell.filterChannel;
+  fcInput.min = 0;
+  fcInput.step = 1;
+  fcInput.addEventListener('input', () => {
+    cell.filterChannel = parseInt(fcInput.value) || 0;
+    regenerateOutput();
+  });
+  fcField.appendChild(fcInput);
+  div.appendChild(fcField);
+
+  // Input attenuation
+  const inDbField = document.createElement('div');
+  inDbField.className = 'cell-field';
+  const inDbLabel = document.createElement('label');
+  inDbLabel.textContent = 'Input Atten (dB)';
+  inDbField.appendChild(inDbLabel);
+  const inDbInput = document.createElement('input');
+  inDbInput.type = 'number';
+  inDbInput.value = cell.inputDb;
+  inDbInput.step = 0.1;
+  const inHint = document.createElement('div');
+  inHint.className = 'db-hint';
+  inHint.innerHTML = `→ scale: <span>${formatToken(inCh, cell.inputDb)}</span>`;
+  inDbInput.addEventListener('input', () => {
+    cell.inputDb = parseFloat(inDbInput.value) || 0;
+    inHint.innerHTML = `→ scale: <span>${formatToken(inCh, cell.inputDb)}</span>`;
+    regenerateOutput();
+  });
+  inDbField.appendChild(inDbInput);
+  inDbField.appendChild(inHint);
+  div.appendChild(inDbField);
+
+  // Output attenuation
+  const outDbField = document.createElement('div');
+  outDbField.className = 'cell-field';
+  const outDbLabel = document.createElement('label');
+  outDbLabel.textContent = 'Output Atten (dB)';
+  outDbField.appendChild(outDbLabel);
+  const outDbInput = document.createElement('input');
+  outDbInput.type = 'number';
+  outDbInput.value = cell.outputDb;
+  outDbInput.step = 0.1;
+  const outHint = document.createElement('div');
+  outHint.className = 'db-hint';
+  outHint.innerHTML = `→ scale: <span>${formatToken(outCh, cell.outputDb)}</span>`;
+  outDbInput.addEventListener('input', () => {
+    cell.outputDb = parseFloat(outDbInput.value) || 0;
+    outHint.innerHTML = `→ scale: <span>${formatToken(outCh, cell.outputDb)}</span>`;
+    regenerateOutput();
+  });
+  outDbField.appendChild(outDbInput);
+  outDbField.appendChild(outHint);
+  div.appendChild(outDbField);
+
+  return div;
+}
+
+// ─────────────────────────────────────────────
+// Config generation
+// ─────────────────────────────────────────────
+function regenerateOutput() {
+  const lines = [];
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+  lines.push(`# Convolver Configuration File`);
+  lines.push(`# Generated: ${now}`);
+  lines.push(`# Format: Convolver v3.0+  (https://convolver.sourceforge.net/config.html)`);
+  lines.push(`#`);
+  lines.push(`# Line 1: <sample_rate> <num_inputs> <num_outputs> <output_channel_mask_hex>`);
+  lines.push(`# Line 2: <input_delay_ms> ...  (one per input channel)`);
+  lines.push(`# Line 3: <output_delay_ms> ... (one per output channel)`);
+  lines.push(`# Then for each active filter path (4 lines each):`);
+  lines.push(`#   <filter_filename>`);
+  lines.push(`#   <filter_channel>          (0-based channel index within the IR file)`);
+  lines.push(`#   <in_ch>.<in_scale>        (input channel . scale factor; 0 = unity gain)`);
+  lines.push(`#   <out_ch>.<out_scale>      (output channel . scale factor; 0 = unity gain)`);
+  lines.push(`#`);
+  lines.push(`# Scale notation: channel.scale where the dot is a separator, NOT a decimal point.`);
+  lines.push(`#   e.g.  0.0   = channel 0, unity gain`);
+  lines.push(`#         1.5   = channel 1, scale 0.5`);
+  lines.push(`#         0.501 = channel 0, scale 0.501  (-6 dB)`);
+  lines.push(`#`);
+
+  // Build channel label comment
+  const inLabels = state.inputLabels.slice(0, state.numInputs).map((l,i) => `Ch${i}=${l}`).join(' ');
+  const outLabels = state.outputLabels.slice(0, state.numOutputs).map((l,i) => `Ch${i}=${l}`).join(' ');
+  lines.push(`# Input channels:  ${inLabels}`);
+  lines.push(`# Output channels: ${outLabels}`);
+  lines.push('');
+
+  // Line 1
+  lines.push(`# --- Header ---`);
+  lines.push(`${state.sampleRate} ${state.numInputs} ${state.numOutputs} 0`);
+  lines.push('');
+
+  // Input delays
+  const inDelayStrs = state.inputDelays.slice(0, state.numInputs).map((d, i) => {
+    const lbl = state.inputLabels[i] || `In${i}`;
+    return d;
+  });
+  const inDelayComment = state.inputDelays.slice(0, state.numInputs)
+    .map((d, i) => `${state.inputLabels[i] || i}=${d}ms`).join(' ');
+  lines.push(`# Input delays (ms): ${inDelayComment}`);
+  lines.push(inDelayStrs.join(' '));
+  lines.push('');
+
+  // Output delays
+  const outDelayStrs = state.outputDelays.slice(0, state.numOutputs).map(d => d);
+  const outDelayComment = state.outputDelays.slice(0, state.numOutputs)
+    .map((d, i) => `${state.outputLabels[i] || i}=${d}ms`).join(' ');
+  lines.push(`# Output delays (ms): ${outDelayComment}`);
+  lines.push(outDelayStrs.join(' '));
+  lines.push('');
+
+  // Filter paths
+  let pathCount = 0;
+  lines.push(`# --- Filter Paths ---`);
+
+  for (let i = 0; i < state.numInputs; i++) {
+    for (let o = 0; o < state.numOutputs; o++) {
+      const cell = state.cells[i][o];
+      if (!cell.enabled) continue;
+      pathCount++;
+
+      const inLbl = state.inputLabels[i] || `In${i}`;
+      const outLbl = state.outputLabels[o] || `Out${o}`;
+      const inToken = formatToken(i, cell.inputDb);
+      const outToken = formatToken(o, cell.outputDb);
+      const inDbStr = cell.inputDb === 0 ? '0 dB (unity)' : `${cell.inputDb} dB → ${inToken.split('.').slice(1).join('.')}`;
+      const outDbStr = cell.outputDb === 0 ? '0 dB (unity)' : `${cell.outputDb} dB → ${outToken.split('.').slice(1).join('.')}`;
+
+      lines.push(`# Path ${pathCount}: ${inLbl} → ${outLbl}  |  IR ch${cell.filterChannel}  |  in: ${inDbStr}  |  out: ${outDbStr}`);
+      lines.push(cell.filterFile || '# WARNING: no filter file specified');
+      lines.push(`${cell.filterChannel}`);
+      lines.push(`${inToken}`);
+      lines.push(`${outToken}`);
+      lines.push('');
+    }
+  }
+
+  if (pathCount === 0) {
+    lines.push(`# (no filter paths enabled)`);
+  }
+
+  lines.push(`# --- End of config (${pathCount} filter path${pathCount !== 1 ? 's' : ''}) ---`);
+
+  document.getElementById('outputText').value = lines.join('\n');
+}
+
+// ─────────────────────────────────────────────
+// Download / Copy
+// ─────────────────────────────────────────────
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const text = document.getElementById('outputText').value;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'convolver.cfg';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const text = document.getElementById('outputText').value;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    btn.classList.add('copy-flash');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copy-flash'); }, 1200);
+  });
+});
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+ensureCells();
+renderLabelInputs();
+renderDelayInputs();
+renderMatrix();
+regenerateOutput();
+</script>
+</body>
+</html>
