@@ -19,7 +19,7 @@
     --text: #c8d4f0;
     --text-dim: #6b7a99;
     --text-bright: #eef2ff;
-    --enabled-bg: #0d1f2d;
+    --enabled-bg: #0a2a42;
     --disabled-bg: #13151e;
     --cell-w: 180px;
     --header-h: 36px;
@@ -101,6 +101,20 @@
     color: var(--text-dim);
     flex: 1;
   }
+  .field-row select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-bright);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 4px 8px;
+    width: 100px;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+  }
+  .field-row select:focus { border-color: var(--accent); }
+
   .field-row input[type=number], .field-row input[type=text] {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -261,14 +275,13 @@
 
   .cell-inner {
     padding: 6px 7px;
-    min-height: 100px;
   }
   .cell-inner.disabled {
     background: var(--disabled-bg);
-    opacity: 0.4;
   }
   .cell-inner.enabled {
     background: var(--enabled-bg);
+    box-shadow: inset 3px 0 0 var(--accent2);
   }
 
   .cell-enable-row {
@@ -460,6 +473,13 @@
         <label>Output Channels</label>
         <input type="number" id="numOutputs" value="2" min="1" max="16" step="1">
       </div>
+      <div class="field-row">
+        <label>Atten Mode</label>
+        <select id="attenMode">
+          <option value="db">dB</option>
+          <option value="scale">Scale Factor</option>
+        </select>
+      </div>
     </div>
 
     <div>
@@ -512,6 +532,7 @@ let state = {
   sampleRate: 44100,
   numInputs: 2,
   numOutputs: 2,
+  attenMode: 'db',
   inputLabels: ['L', 'R'],
   outputLabels: ['L', 'R'],
   inputDelays: [0, 0],
@@ -573,8 +594,8 @@ function formatScale(linear) {
   return s.replace(/^0\./, '').replace(/0+$/, '') || '0';
 }
 
-function formatToken(channel, db) {
-  const linear = dbToLinear(db);
+function formatToken(channel, attenValue) {
+  const linear = state.attenMode === 'db' ? dbToLinear(attenValue) : attenValue;
   if (linear === 0) return `${channel}.0`;
   const scaleStr = formatScale(linear);
   return `${channel}.${scaleStr}`;
@@ -612,6 +633,29 @@ document.getElementById('numOutputs').addEventListener('change', e => {
   regenerateOutput();
 });
 
+function convertAttenValues(fromMode, toMode) {
+  for (let i = 0; i < state.numInputs; i++) {
+    for (let o = 0; o < state.numOutputs; o++) {
+      const cell = state.cells[i][o];
+      if (fromMode === 'db' && toMode === 'scale') {
+        cell.inputDb  = cell.inputDb  === 0 ? 0 : parseFloat(Math.pow(10, cell.inputDb  / 20).toFixed(4));
+        cell.outputDb = cell.outputDb === 0 ? 0 : parseFloat(Math.pow(10, cell.outputDb / 20).toFixed(4));
+      } else if (fromMode === 'scale' && toMode === 'db') {
+        cell.inputDb  = cell.inputDb  === 0 ? 0 : parseFloat((20 * Math.log10(cell.inputDb )).toFixed(2));
+        cell.outputDb = cell.outputDb === 0 ? 0 : parseFloat((20 * Math.log10(cell.outputDb)).toFixed(2));
+      }
+    }
+  }
+}
+
+document.getElementById('attenMode').addEventListener('change', e => {
+  const prev = state.attenMode;
+  state.attenMode = e.target.value;
+  convertAttenValues(prev, state.attenMode);
+  renderMatrix();
+  regenerateOutput();
+});
+
 function renderLabelInputs() {
   renderLabelGrid('inputLabelsGrid', state.inputLabels, 'inputLabels', 'In');
   renderLabelGrid('outputLabelsGrid', state.outputLabels, 'outputLabels', 'Out');
@@ -632,7 +676,8 @@ function renderLabelGrid(gridId, arr, stateKey, prefix) {
       const idx = parseInt(e.target.dataset.idx);
       const key = e.target.dataset.key;
       state[key][idx] = e.target.value;
-      renderMatrix(); // re-render headers
+      renderDelayInputs();
+      renderMatrix();
       regenerateOutput();
     });
   });
@@ -722,7 +767,11 @@ function buildCell(inCh, outCh) {
   cb.type = 'checkbox';
   cb.checked = cell.enabled;
   const cbLabel = document.createElement('span');
-  cbLabel.textContent = cell.enabled ? 'ENABLED' : 'disabled';
+  const updateLabel = (enabled) => {
+    cbLabel.textContent = enabled ? 'ENABLED' : 'disabled';
+    cbLabel.style.color = enabled ? 'var(--accent2)' : 'var(--text-dim)';
+  };
+  updateLabel(cell.enabled);
   enableRow.appendChild(cb);
   enableRow.appendChild(cbLabel);
   div.appendChild(enableRow);
@@ -730,9 +779,15 @@ function buildCell(inCh, outCh) {
   cb.addEventListener('change', () => {
     cell.enabled = cb.checked;
     div.className = `cell-inner ${cell.enabled ? 'enabled' : 'disabled'}`;
-    cbLabel.textContent = cell.enabled ? 'ENABLED' : 'disabled';
+    updateLabel(cell.enabled);
+    contentFields.style.display = cell.enabled ? '' : 'none';
     regenerateOutput();
   });
+
+  // Content fields container
+  const contentFields = document.createElement('div');
+  contentFields.style.display = cell.enabled ? '' : 'none';
+  div.appendChild(contentFields);
 
   // Filter file
   const fileField = document.createElement('div');
@@ -755,7 +810,7 @@ function buildCell(inCh, outCh) {
   fileInput.placeholder = 'relative/path/to/ir.wav';
   fileEditWrap.appendChild(fileInput);
   fileField.appendChild(fileEditWrap);
-  div.appendChild(fileField);
+  contentFields.appendChild(fileField);
 
   fileDisplay.addEventListener('click', () => {
     fileDisplay.style.display = 'none';
@@ -792,55 +847,64 @@ function buildCell(inCh, outCh) {
   fcInput.min = 0;
   fcInput.step = 1;
   fcInput.addEventListener('input', () => {
-    cell.filterChannel = parseInt(fcInput.value) || 0;
+    cell.filterChannel = Math.max(0, Math.floor(parseFloat(fcInput.value) || 0));
+    fcInput.value = cell.filterChannel;
     regenerateOutput();
   });
   fcField.appendChild(fcInput);
-  div.appendChild(fcField);
+  contentFields.appendChild(fcField);
 
   // Input attenuation
   const inDbField = document.createElement('div');
   inDbField.className = 'cell-field';
   const inDbLabel = document.createElement('label');
-  inDbLabel.textContent = 'Input Atten (dB)';
+  inDbLabel.textContent = state.attenMode === 'db' ? 'Input Atten (dB)' : 'Input Scale';
   inDbField.appendChild(inDbLabel);
   const inDbInput = document.createElement('input');
   inDbInput.type = 'number';
   inDbInput.value = cell.inputDb;
-  inDbInput.step = 0.1;
+  if (state.attenMode === 'db') { inDbInput.max = 0; inDbInput.step = 0.1; }
+  else { inDbInput.min = 0; inDbInput.max = 0.9999; inDbInput.step = 0.001; }
   const inHint = document.createElement('div');
   inHint.className = 'db-hint';
-  inHint.innerHTML = `→ scale: <span>${formatToken(inCh, cell.inputDb)}</span>`;
+  inHint.innerHTML = `→ token: <span>${formatToken(inCh, cell.inputDb)}</span>`;
   inDbInput.addEventListener('input', () => {
-    cell.inputDb = parseFloat(inDbInput.value) || 0;
-    inHint.innerHTML = `→ scale: <span>${formatToken(inCh, cell.inputDb)}</span>`;
+    const raw = parseFloat(inDbInput.value);
+    if (isNaN(raw)) return;
+    cell.inputDb = state.attenMode === 'db' ? Math.min(0, raw) : Math.max(0, Math.min(0.9999, raw));
+    if (cell.inputDb !== raw) inDbInput.value = cell.inputDb;
+    inHint.innerHTML = `→ token: <span>${formatToken(inCh, cell.inputDb)}</span>`;
     regenerateOutput();
   });
   inDbField.appendChild(inDbInput);
   inDbField.appendChild(inHint);
-  div.appendChild(inDbField);
+  contentFields.appendChild(inDbField);
 
   // Output attenuation
   const outDbField = document.createElement('div');
   outDbField.className = 'cell-field';
   const outDbLabel = document.createElement('label');
-  outDbLabel.textContent = 'Output Atten (dB)';
+  outDbLabel.textContent = state.attenMode === 'db' ? 'Output Atten (dB)' : 'Output Scale';
   outDbField.appendChild(outDbLabel);
   const outDbInput = document.createElement('input');
   outDbInput.type = 'number';
   outDbInput.value = cell.outputDb;
-  outDbInput.step = 0.1;
+  if (state.attenMode === 'db') { outDbInput.max = 0; outDbInput.step = 0.1; }
+  else { outDbInput.min = 0; outDbInput.max = 0.9999; outDbInput.step = 0.001; }
   const outHint = document.createElement('div');
   outHint.className = 'db-hint';
-  outHint.innerHTML = `→ scale: <span>${formatToken(outCh, cell.outputDb)}</span>`;
+  outHint.innerHTML = `→ token: <span>${formatToken(outCh, cell.outputDb)}</span>`;
   outDbInput.addEventListener('input', () => {
-    cell.outputDb = parseFloat(outDbInput.value) || 0;
-    outHint.innerHTML = `→ scale: <span>${formatToken(outCh, cell.outputDb)}</span>`;
+    const raw = parseFloat(outDbInput.value);
+    if (isNaN(raw)) return;
+    cell.outputDb = state.attenMode === 'db' ? Math.min(0, raw) : Math.max(0, Math.min(0.9999, raw));
+    if (cell.outputDb !== raw) outDbInput.value = cell.outputDb;
+    outHint.innerHTML = `→ token: <span>${formatToken(outCh, cell.outputDb)}</span>`;
     regenerateOutput();
   });
   outDbField.appendChild(outDbInput);
   outDbField.appendChild(outHint);
-  div.appendChild(outDbField);
+  contentFields.appendChild(outDbField);
 
   return div;
 }
@@ -916,8 +980,14 @@ function regenerateOutput() {
       const outLbl = state.outputLabels[o] || `Out${o}`;
       const inToken = formatToken(i, cell.inputDb);
       const outToken = formatToken(o, cell.outputDb);
-      const inDbStr = cell.inputDb === 0 ? '0 dB (unity)' : `${cell.inputDb} dB → ${inToken.split('.').slice(1).join('.')}`;
-      const outDbStr = cell.outputDb === 0 ? '0 dB (unity)' : `${cell.outputDb} dB → ${outToken.split('.').slice(1).join('.')}`;
+      const isDb = state.attenMode === 'db';
+      const fmtAtten = (val, token) => {
+        const scalePart = `.${token.split('.').slice(1).join('.')}`;
+        if (val === 0) return isDb ? '0 dB (unity)' : '0 (unity)';
+        return isDb ? `${val} dB → ${scalePart}` : `scale ${val} → ${scalePart}`;
+      };
+      const inDbStr = fmtAtten(cell.inputDb, inToken);
+      const outDbStr = fmtAtten(cell.outputDb, outToken);
 
       lines.push(`# Path ${pathCount}: ${inLbl} → ${outLbl}  |  IR ch${cell.filterChannel}  |  in: ${inDbStr}  |  out: ${outDbStr}`);
       lines.push(cell.filterFile || '# WARNING: no filter file specified');
