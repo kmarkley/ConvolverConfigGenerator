@@ -290,6 +290,22 @@
 
   .cell-inner {
     padding: 6px 7px;
+    position: relative;
+  }
+  .group-badge {
+    position: absolute;
+    top: 5px;
+    right: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    pointer-events: none;
+    display: none;
+  }
+  .group-badge.visible {
+    display: inline-block;
   }
   .cell-inner.disabled {
     background: var(--disabled-bg);
@@ -1088,12 +1104,47 @@ function buildCell(inCh, outCh) {
   outDbField.appendChild(outHint);
   contentFields.appendChild(outDbField);
 
+  const badge = document.createElement('span');
+  badge.className = 'group-badge';
+  div.appendChild(badge);
+  cell._badge = badge;
+
   return div;
 }
 
 // ─────────────────────────────────────────────
 // Config generation
 // ─────────────────────────────────────────────
+const GROUP_COLORS = [
+  { bg: '#00bfff', fg: '#000' },
+  { bg: '#ffd700', fg: '#000' },
+  { bg: '#ff6bd6', fg: '#000' },
+  { bg: '#ff8c00', fg: '#000' },
+  { bg: '#b4ff00', fg: '#000' },
+  { bg: '#c084fc', fg: '#000' },
+];
+const SOLO_BADGE = { bg: '#555', fg: '#aaa' };
+
+function updateGroupBadges(groupData) {
+  for (let i = 0; i < state.numInputs; i++)
+    for (let o = 0; o < state.numOutputs; o++)
+      state.cells[i][o]._badge?.classList.remove('visible');
+
+  for (const { inputs, outputs, pathNumber, isSolo } of groupData) {
+    const { bg, fg } = isSolo ? SOLO_BADGE : GROUP_COLORS[(pathNumber - 1) % GROUP_COLORS.length];
+    for (const i of inputs) {
+      for (const o of outputs) {
+        const badge = state.cells[i][o]._badge;
+        if (!badge) continue;
+        badge.textContent = `P${pathNumber}`;
+        badge.style.background = bg;
+        badge.style.color = fg;
+        badge.classList.add('visible');
+      }
+    }
+  }
+}
+
 function partitionIntoGroups(cells, pairs, numInputs, numOutputs) {
   const key = (i, o) => i * numOutputs + o;
   const remaining = new Set(pairs.map(p => key(p.inCh, p.outCh)));
@@ -1229,12 +1280,16 @@ function regenerateOutput() {
   const isDb = state.attenMode === 'db';
   const unit = isDb ? 'dB' : '';
 
+  const allGroupsWithNumbers = [];
+
   for (const pairs of byFilter.values()) {
     const { filterFile, filterChannel } = state.cells[pairs[0].inCh][pairs[0].outCh];
     const groups = partitionIntoGroups(state.cells, pairs, state.numInputs, state.numOutputs);
 
     for (const { inputs, outputs } of groups) {
       pathCount++;
+      const isSolo = inputs.size * outputs.size === 1;
+      allGroupsWithNumbers.push({ inputs, outputs, pathNumber: pathCount, isSolo });
       const ins  = [...inputs ].sort((a, b) => a - b);
       const outs = [...outputs].sort((a, b) => a - b);
 
@@ -1252,6 +1307,8 @@ function regenerateOutput() {
       lines.push('');
     }
   }
+
+  updateGroupBadges(allGroupsWithNumbers);
 
   if (pathCount === 0) {
     lines.push(`# (no filter paths enabled)`);
